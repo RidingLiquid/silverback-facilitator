@@ -226,31 +226,12 @@ const SILVERBACK_RESOURCES = [
     id: 'trending-tokens',
     url: `${X402_SERVICE_BASE}/api/v1/trending-tokens`,
     method: 'GET',
-    description: 'Chain-specific trending tokens from GeckoTerminal',
+    description: 'Chain-specific trending tokens from CoinGecko On-Chain API',
     category: 'market-data',
-    tags: ['trending', 'tokens', 'geckoterminal'],
+    tags: ['trending', 'tokens', 'coingecko', 'onchain'],
     priceUsd: 0.001,
     input: { type: 'query', params: { chain: 'string (default base)' } },
     output: { type: 'json', example: { tokens: [] } },
-  },
-  // AI Services
-  {
-    id: 'chat',
-    url: `${X402_SERVICE_BASE}/api/v1/chat`,
-    method: 'POST',
-    description: 'AI-powered DeFi chat with real-time intelligence',
-    category: 'ai',
-    tags: ['chat', 'ai', 'assistant', 'defi'],
-    priceUsd: 0.05,
-    input: {
-      type: 'json',
-      schema: {
-        message: { type: 'string', description: 'User message' },
-        context: { type: 'array', description: 'Previous messages (optional)' },
-      },
-      required: ['message'],
-    },
-    output: { type: 'json', example: { response: '', suggestions: [] } },
   },
   // Backtesting
   {
