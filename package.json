@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Silverback x402 Payment Facilitator - Multi-token Permit2 settlements on Base",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
@@ -11,19 +10,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "pg": "^8.11.3",
-    "viem": "^2.21.0"
-  },
-  "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
     "@types/pg": "^8.10.9",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "typescript": "^5.3.3",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0"
   },
   "engines": {
     "node": ">=18"
