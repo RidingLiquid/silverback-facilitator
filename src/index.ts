@@ -39,6 +39,7 @@ import supportedRouter from './routes/supported';
 import verifyRouter from './routes/verify';
 import settleRouter from './routes/settle';
 import webhooksRouter from './routes/webhooks';
+import discoveryRouter from './routes/discovery';
 import { FACILITATOR_CONFIG, getSupportedNetworks, X402_PROXY_MODE } from './config/networks';
 import { getSupportedTokensList } from './config/tokens';
 import { initDatabase, isUsingPostgres } from './services/database';
@@ -186,6 +187,11 @@ export function createFacilitatorRouter(): Router {
         '/settle/stats': 'Settlement statistics',
         '/settle/recent': 'Recent settlements',
         '/webhooks': 'Manage webhooks (GET/POST/DELETE)',
+        '/discovery/resources': 'Bazaar discovery - list x402 resources',
+        '/discovery/resources/:id': 'Get specific resource by ID',
+        '/discovery/categories': 'List resource categories',
+        '/discovery/tags': 'List resource tags',
+        '/discovery/info': 'Discovery service info',
       },
       protocols: {
         permit2: 'Works with ANY ERC-20 token',
@@ -211,6 +217,7 @@ export function createFacilitatorRouter(): Router {
   router.use('/verify', verifyRouter);
   router.use('/settle', settleRouter);
   router.use('/webhooks', webhooksRouter);
+  router.use('/discovery', discoveryRouter);
 
   return router;
 }
@@ -360,6 +367,7 @@ export async function startFacilitator(): Promise<Express> {
     console.log('  POST /verify        - Verify payment');
     console.log('  POST /settle        - Execute payment');
     console.log('  POST /webhooks      - Register webhook');
+    console.log('  GET  /discovery/resources - Bazaar discovery');
     console.log('');
   });
 
