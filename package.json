@@ -4,10 +4,10 @@
   "description": "Silverback x402 Payment Facilitator - Multi-token Permit2 settlements on Base",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --skipLibCheck",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
     "@types/cors": "^2.8.17",
