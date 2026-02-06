@@ -195,6 +195,36 @@ export function buildCaip2(chainId: number, namespace: string = 'eip155'): strin
 // Facilitator Configuration
 // ============================================================================
 
+// ============================================================================
+// Fee Splitter Configuration
+// ============================================================================
+
+export const FEE_SPLITTER_CONFIG = {
+  /** Enable fee splitter (set to false to bypass and use direct payments) */
+  enabled: process.env.FEE_SPLITTER_ENABLED === 'true',
+
+  /** Fee Splitter contract address on Base mainnet */
+  addressMainnet: (process.env.FEE_SPLITTER_ADDRESS_MAINNET ||
+    '0x0000000000000000000000000000000000000000') as `0x${string}`,
+
+  /** Fee Splitter contract address on Base Sepolia (testnet) */
+  addressTestnet: (process.env.FEE_SPLITTER_ADDRESS_TESTNET ||
+    '0x8514dc860BCB61f309264ba89B8952E264286D1f') as `0x${string}`,
+
+  /** Get fee splitter address for a given chain ID */
+  getAddress(chainId: number): `0x${string}` {
+    if (chainId === 84532) return this.addressTestnet;
+    if (chainId === 8453) return this.addressMainnet;
+    return '0x0000000000000000000000000000000000000000' as `0x${string}`;
+  },
+
+  /** Check if fee splitter is available for a chain */
+  isAvailable(chainId: number): boolean {
+    const addr = this.getAddress(chainId);
+    return this.enabled && addr !== '0x0000000000000000000000000000000000000000';
+  },
+};
+
 export const FACILITATOR_CONFIG = {
   /** Facilitator name for identification */
   name: process.env.FACILITATOR_NAME || 'Silverback',

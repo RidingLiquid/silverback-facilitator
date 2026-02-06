@@ -54,6 +54,11 @@ import {
   isErc3009Token,
   detectPayloadProtocol,
 } from './erc3009';
+import {
+  isFeeSplitterEnabled,
+  getFeeSplitterAddress,
+  executeSplitPayment,
+} from './fee-splitter';
 
 // ============================================================================
 // In-Memory Fallback (when database not available)
@@ -274,7 +279,32 @@ export async function settlePayment(
   // Compute witness hash
   const witnessHash = computeWitnessHash(witness);
 
-  console.log(`[Settlement] Permit2: ${amount} tokens from ${redactAddress(payer)} to ${redactAddress(receiver)}`);
+  // ============================================================================
+  // Fee Splitter Integration
+  // ============================================================================
+  // Determine if we should use the fee splitter for this settlement
+  const useFeeSplitter = isFeeSplitterEnabled(chainId);
+  const feeSplitterAddress = useFeeSplitter ? getFeeSplitterAddress(chainId) : null;
+
+  // When using fee splitter:
+  // - payTo (in 402 response) = fee splitter address
+  // - actualRecipient (in extra) = endpoint wallet that should receive funds
+  // - The client signs Permit2 with receiver = payTo = fee splitter
+  // - We then call splitPayment to route funds to actualRecipient
+  const actualRecipient = useFeeSplitter
+    ? (requirements.extra?.actualRecipient as `0x${string}` || receiver)
+    : receiver;
+
+  // Permit2 transfer target:
+  // - If fee splitter enabled: transfer to fee splitter (receiver from witness = payTo = splitter)
+  // - If fee splitter disabled: transfer directly to receiver (original behavior)
+  // Note: receiver here comes from witness, which should match payTo in requirements
+  const permit2Receiver = receiver; // Always use witness receiver (what client signed)
+
+  console.log(
+    `[Settlement] Permit2: ${amount} tokens from ${redactAddress(payer)} to ${redactAddress(permit2Receiver)}` +
+    (useFeeSplitter ? ` (via FeeSplitter → ${redactAddress(actualRecipient)})` : '')
+  );
 
   let transactionHash: `0x${string}`;
 
@@ -290,7 +320,7 @@ export async function settlePayment(
           nonce: BigInt(authorization.nonce),
           deadline: BigInt(authorization.deadline),
         },
-        { to: receiver, requestedAmount: amount },
+        { to: permit2Receiver, requestedAmount: amount },
         payer,
         witnessHash,
         WITNESS_TYPE_STRING,
@@ -310,7 +340,7 @@ export async function settlePayment(
           nonce: BigInt(authorization.nonce),
           deadline: BigInt(authorization.deadline),
         },
-        { to: receiver, requestedAmount: amount },
+        { to: permit2Receiver, requestedAmount: amount },
         payer,
         witnessHash,
         WITNESS_TYPE_STRING,
@@ -319,7 +349,7 @@ export async function settlePayment(
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Settlement] Transaction failed:', errorMsg);
+    console.error('[Settlement] Permit2 transaction failed:', errorMsg);
     await updateTransaction(transactionId, { status: 'failed', error_reason: errorMsg });
 
     // Send webhook
@@ -336,16 +366,16 @@ export async function settlePayment(
 
     return {
       success: false,
-      error: `Transaction failed: ${errorMsg}`,
+      error: `Permit2 transaction failed: ${errorMsg}`,
       transactionId,
     };
   }
 
-  // Update transaction with hash
+  // Update transaction with Permit2 hash
   await updateTransaction(transactionId, { tx_hash: transactionHash });
-  console.log(`[Settlement] Transaction submitted: ${transactionHash}`);
+  console.log(`[Settlement] Permit2 submitted: ${transactionHash}`);
 
-  // Wait for confirmation
+  // Wait for Permit2 confirmation
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: transactionHash,
     confirmations: networkConfig.confirmations,
@@ -353,7 +383,7 @@ export async function settlePayment(
   });
 
   if (receipt.status !== 'success') {
-    await updateTransaction(transactionId, { status: 'failed', error_reason: 'Transaction reverted' });
+    await updateTransaction(transactionId, { status: 'failed', error_reason: 'Permit2 transaction reverted' });
 
     await notifySettlementFailed({
       transactionId,
@@ -363,14 +393,72 @@ export async function settlePayment(
       amount: amount.toString(),
       fee: feeAmount.toString(),
       network: payload.network,
-      errorReason: 'Transaction reverted',
+      errorReason: 'Permit2 transaction reverted',
     });
 
     return {
       success: false,
-      error: 'Transaction reverted',
+      error: 'Permit2 transaction reverted',
       transactionId,
     };
+  }
+
+  console.log(`[Settlement] Permit2 confirmed in block ${receipt.blockNumber}`);
+
+  // ============================================================================
+  // Fee Splitter: Split Payment (if enabled)
+  // ============================================================================
+  let splitTxHash: `0x${string}` | undefined;
+  let actualFeeAmount = feeAmount;
+
+  if (useFeeSplitter && feeSplitterAddress) {
+    console.log(`[Settlement] Executing fee split to ${redactAddress(actualRecipient)}...`);
+
+    const splitResult = await executeSplitPayment({
+      token: tokenAddress,
+      payer,
+      recipient: actualRecipient,
+      amount,
+      network: payload.network,
+    });
+
+    if (!splitResult.success) {
+      // CRITICAL: Permit2 succeeded but splitPayment failed
+      // Funds are stuck in the fee splitter contract
+      // Mark as failed but preserve the Permit2 hash for recovery
+      console.error('[Settlement] CRITICAL: splitPayment failed after Permit2 succeeded!');
+      console.error(`[Settlement] Permit2 hash: ${transactionHash}`);
+      console.error(`[Settlement] Error: ${splitResult.error}`);
+
+      await updateTransaction(transactionId, {
+        status: 'failed',
+        error_reason: `splitPayment failed: ${splitResult.error}. Funds in splitter need recovery. Permit2: ${transactionHash}`,
+      });
+
+      await notifySettlementFailed({
+        transactionId,
+        payer,
+        receiver,
+        token: tokenInfo?.symbol || tokenAddress,
+        amount: amount.toString(),
+        fee: feeAmount.toString(),
+        network: payload.network,
+        errorReason: `splitPayment failed after Permit2. Recovery needed. Error: ${splitResult.error}`,
+      });
+
+      return {
+        success: false,
+        error: `splitPayment failed: ${splitResult.error}. Permit2 succeeded (${transactionHash}), funds need recovery.`,
+        transactionId,
+      };
+    }
+
+    splitTxHash = splitResult.transactionHash;
+    actualFeeAmount = splitResult.feeAmount || feeAmount;
+
+    console.log(
+      `[Settlement] Split complete! Net: ${splitResult.netAmount}, Fee: ${actualFeeAmount}, TX: ${splitTxHash}`
+    );
   }
 
   // Mark success
@@ -378,39 +466,46 @@ export async function settlePayment(
   await recordNonceUsed(payer, nonce, tokenAddress, transactionHash);
 
   // Log to memory as well (for getRecentSettlements when not using DB)
+  // Use actualRecipient when fee splitter is enabled (that's where funds went)
+  const finalReceiver = useFeeSplitter ? actualRecipient : receiver;
+
   memoryLog.push({
     nonce,
     payer,
-    receiver,
+    receiver: finalReceiver,
     token: tokenInfo?.symbol || tokenAddress,
     amount: amount.toString(),
-    fee: feeAmount.toString(),
-    txHash: transactionHash,
+    fee: actualFeeAmount.toString(),
+    txHash: splitTxHash || transactionHash,
     timestamp: new Date(),
     protocol: 'permit2',
   });
 
-  console.log(`[Settlement] Success! Hash: ${transactionHash}, Block: ${receipt.blockNumber}`);
+  console.log(
+    `[Settlement] Success! Permit2: ${transactionHash}` +
+    (splitTxHash ? `, Split: ${splitTxHash}` : '') +
+    `, Block: ${receipt.blockNumber}`
+  );
 
   // Send webhook
   await notifySettlementSuccess({
     transactionId,
-    txHash: transactionHash,
+    txHash: splitTxHash || transactionHash,
     payer,
-    receiver,
+    receiver: finalReceiver,
     token: tokenInfo?.symbol || tokenAddress,
     amount: amount.toString(),
-    fee: feeAmount.toString(),
+    fee: actualFeeAmount.toString(),
     network: payload.network,
   });
 
   return {
     success: true,
-    transactionHash,
+    transactionHash: splitTxHash || transactionHash,
     blockNumber: receipt.blockNumber,
     gasUsed: receipt.gasUsed,
     payer,  // x402 spec requires payer in response
-    fee: feeAmount,
+    fee: actualFeeAmount,
     protocol: 'permit2',
     transactionId,
   };

@@ -60,6 +60,13 @@ export interface PaymentRequirements {
   payTo: `0x${string}`;
   token?: `0x${string}`; // Optional: specific token required (Permit2 style)
   asset?: `0x${string}`; // Optional: asset address (ERC-3009/OpenFacilitator style)
+  extra?: {
+    /** Actual recipient wallet when using fee splitter (payTo = splitter) */
+    actualRecipient?: `0x${string}`;
+    /** Version of payment requirements format */
+    version?: string;
+    [key: string]: unknown;
+  };
 }
 
 // ============================================================================
