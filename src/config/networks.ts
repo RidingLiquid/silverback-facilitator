@@ -214,11 +214,11 @@ export const FEE_SPLITTER_CONFIG = {
   /**
    * Default recipient address for when actualRecipient is not specified.
    * This is used when x402 SDK strips extra.actualRecipient from requirements.
-   * Funds will be sent here after fee split.
+   * Net payment (after fee) goes here. Fee goes to contract's on-chain treasury.
    */
-  defaultTreasury: (process.env.FACILITATOR_FEE_RECIPIENT ||
+  defaultTreasury: (process.env.X402_PAYMENT_RECIPIENT ||
     process.env.X402_WALLET_ADDRESS ||
-    '0x48380bCf1c09773C9E96901F89A7A6B75E2BBeCC') as `0x${string}`,
+    '0xD34411a70EffbDd000c529bbF572082ffDcF1794') as `0x${string}`,
 
   /** Get fee splitter address for a given chain ID */
   getAddress(chainId: number): `0x${string}` {
