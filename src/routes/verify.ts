@@ -44,6 +44,22 @@ router.post('/', async (req: Request, res: Response) => {
       if (!payload.x402Version && topLevelVersion) payload.x402Version = topLevelVersion;
     }
 
+    // Normalize v2 requirements field names:
+    // v2 uses "amount" (v1 uses "maxAmountRequired")
+    // v2 uses "asset" (v1 uses "token")
+    // v2 may omit "resource"
+    if (paymentRequirements) {
+      if (!paymentRequirements.maxAmountRequired && paymentRequirements.amount) {
+        paymentRequirements.maxAmountRequired = paymentRequirements.amount;
+      }
+      if (!paymentRequirements.token && paymentRequirements.asset) {
+        paymentRequirements.token = paymentRequirements.asset;
+      }
+      if (!paymentRequirements.resource) {
+        paymentRequirements.resource = paymentRequirements.payTo || 'unknown';
+      }
+    }
+
     // 1. Validate request structure
     if (!payload || !paymentRequirements) {
       return res.status(400).json({
@@ -329,6 +345,18 @@ router.post('/quick', async (req: Request, res: Response) => {
       if (!payload.scheme && paymentRequirements.scheme) payload.scheme = paymentRequirements.scheme;
       if (!payload.network && paymentRequirements.network) payload.network = paymentRequirements.network;
       if (!payload.x402Version && body.x402Version) payload.x402Version = body.x402Version;
+    }
+    // Normalize v2 requirements field names
+    if (paymentRequirements) {
+      if (!paymentRequirements.maxAmountRequired && paymentRequirements.amount) {
+        paymentRequirements.maxAmountRequired = paymentRequirements.amount;
+      }
+      if (!paymentRequirements.token && paymentRequirements.asset) {
+        paymentRequirements.token = paymentRequirements.asset;
+      }
+      if (!paymentRequirements.resource) {
+        paymentRequirements.resource = paymentRequirements.payTo || 'unknown';
+      }
     }
 
     if (!payload || !paymentRequirements) {

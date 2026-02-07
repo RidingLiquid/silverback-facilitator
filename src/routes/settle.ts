@@ -42,6 +42,19 @@ router.post('/', async (req: Request, res: Response) => {
       if (!payload.x402Version && topLevelVersion) payload.x402Version = topLevelVersion;
     }
 
+    // Normalize v2 requirements field names
+    if (paymentRequirements) {
+      if (!paymentRequirements.maxAmountRequired && paymentRequirements.amount) {
+        paymentRequirements.maxAmountRequired = paymentRequirements.amount;
+      }
+      if (!paymentRequirements.token && paymentRequirements.asset) {
+        paymentRequirements.token = paymentRequirements.asset;
+      }
+      if (!paymentRequirements.resource) {
+        paymentRequirements.resource = paymentRequirements.payTo || 'unknown';
+      }
+    }
+
     // 1. Validate request structure
     if (!payload || !paymentRequirements) {
       return res.status(400).json({

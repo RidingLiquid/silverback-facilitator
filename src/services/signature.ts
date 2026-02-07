@@ -280,19 +280,39 @@ export function validatePayloadStructure(payload: unknown): payload is PaymentPa
 
 /**
  * Validate requirements structure
+ *
+ * Supports both v1 and v2 field names:
+ * - v1: maxAmountRequired, token, resource (required)
+ * - v2: amount, asset, resource (optional)
  */
 export function validateRequirementsStructure(
   requirements: unknown
 ): requirements is PaymentRequirements {
-  if (!requirements || typeof requirements !== 'object') return false;
+  if (!requirements || typeof requirements !== 'object') {
+    console.log('[ValidateReqs] Failed: requirements is null or not object');
+    return false;
+  }
 
   const r = requirements as Record<string, unknown>;
 
-  if (r.scheme !== 'exact') return false;
-  if (typeof r.network !== 'string') return false;
-  if (typeof r.maxAmountRequired !== 'string') return false;
-  if (typeof r.resource !== 'string') return false;
-  if (typeof r.payTo !== 'string') return false;
+  if (r.scheme !== 'exact') {
+    console.log('[ValidateReqs] Failed: scheme is', r.scheme);
+    return false;
+  }
+  if (typeof r.network !== 'string') {
+    console.log('[ValidateReqs] Failed: network is', typeof r.network, r.network);
+    return false;
+  }
+  // Accept both v1 "maxAmountRequired" and v2 "amount"
+  if (typeof r.maxAmountRequired !== 'string' && typeof r.amount !== 'string') {
+    console.log('[ValidateReqs] Failed: no maxAmountRequired or amount. Keys:', Object.keys(r));
+    return false;
+  }
+  // resource is required in v1 but not in v2
+  if (typeof r.payTo !== 'string') {
+    console.log('[ValidateReqs] Failed: payTo is', typeof r.payTo);
+    return false;
+  }
 
   return true;
 }
