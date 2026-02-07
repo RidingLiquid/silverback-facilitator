@@ -245,7 +245,7 @@ export function validatePayloadStructure(payload: unknown): payload is PaymentPa
 
   const p = payload as Record<string, unknown>;
 
-  if (p.x402Version !== 1) return false;
+  if (p.x402Version !== 1 && p.x402Version !== 2) return false;
   if (p.scheme !== 'exact') return false;
   if (typeof p.network !== 'string') return false;
   if (!p.payload || typeof p.payload !== 'object') return false;

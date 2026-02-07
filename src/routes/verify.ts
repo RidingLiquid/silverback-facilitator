@@ -85,7 +85,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // 3d. Validate x402 version (check both top-level and nested)
     const x402Version = topLevelVersion || payload.x402Version;
-    if (x402Version !== 1) {
+    if (x402Version !== 1 && x402Version !== 2) {
       return res.status(400).json({
         isValid: false,
         invalidReason: `Unsupported x402 version: ${x402Version}`,

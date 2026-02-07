@@ -49,7 +49,7 @@ const router = Router();
 router.get('/', (_req: Request, res: Response) => {
   // Build x402 spec compliant "kinds" array
   const kinds = getSupportedNetworksCoinbase().map(network => ({
-    x402Version: 1 as const,
+    x402Version: 2 as const,
     scheme: 'exact' as const,
     network,
   }));
@@ -58,7 +58,7 @@ router.get('/', (_req: Request, res: Response) => {
     // x402 spec required field
     kinds,
     // Extra fields for convenience (not in x402 spec)
-    x402Version: 1,
+    x402Version: 2,
     schemes: ['exact'],
     networks: getSupportedNetworks(), // CAIP-2 format: ["eip155:8453"]
     networksCoinbase: getSupportedNetworksCoinbase(), // Coinbase format: ["base"]
