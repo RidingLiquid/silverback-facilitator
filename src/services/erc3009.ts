@@ -17,8 +17,9 @@ import {
 import { base } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { PaymentPayload, PaymentRequirements, SettlementResult } from '../types';
-import { getNetworkConfig, FACILITATOR_CONFIG } from '../config/networks';
+import { getNetworkConfig, FACILITATOR_CONFIG, FEE_SPLITTER_CONFIG } from '../config/networks';
 import { getTokenByAddress, getTokenFeePercent, calculateFeeAmount } from '../config/tokens';
+import { isFeeSplitterEnabled, getFeeSplitterAddress, executeSplitPayment } from './fee-splitter';
 
 // ============================================================================
 // ERC-3009 Token Registry
@@ -433,6 +434,53 @@ export async function settleErc3009Payment(
     }
 
     console.log(`[ERC-3009] Success! Block: ${receipt.blockNumber}`);
+
+    // ============================================================================
+    // Fee Splitter: Split Payment (if enabled and payTo is fee splitter)
+    // ============================================================================
+    const chainId = networkConfig.chainId;
+    const feeSplitterAddress = getFeeSplitterAddress(chainId);
+    const useFeeSplitter = isFeeSplitterEnabled(chainId) &&
+      authorization.to.toLowerCase() === feeSplitterAddress.toLowerCase();
+
+    if (useFeeSplitter) {
+      console.log(`[ERC-3009] Fee splitter enabled, executing split payment...`);
+
+      // Get the actual recipient from config (where payments should ultimately go)
+      const actualRecipient = FEE_SPLITTER_CONFIG.defaultTreasury;
+
+      const splitResult = await executeSplitPayment({
+        token: tokenAddress as `0x${string}`,
+        payer: authorization.from,
+        recipient: actualRecipient,
+        amount: BigInt(authorization.value),
+        network,
+      });
+
+      if (!splitResult.success) {
+        // CRITICAL: ERC-3009 succeeded but splitPayment failed
+        // Funds are stuck in the fee splitter contract
+        console.error('[ERC-3009] CRITICAL: splitPayment failed after ERC-3009 succeeded!');
+        console.error(`[ERC-3009] ERC-3009 hash: ${txHash}`);
+        console.error(`[ERC-3009] Error: ${splitResult.error}`);
+
+        return {
+          success: false,
+          error: `splitPayment failed: ${splitResult.error}. ERC-3009 succeeded (${txHash}), funds need recovery.`,
+        };
+      }
+
+      console.log(
+        `[ERC-3009] Split complete! Net: ${splitResult.netAmount}, Fee: ${splitResult.feeAmount}, TX: ${splitResult.transactionHash}`
+      );
+
+      return {
+        success: true,
+        transactionHash: splitResult.transactionHash || txHash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed,
+      };
+    }
 
     return {
       success: true,
