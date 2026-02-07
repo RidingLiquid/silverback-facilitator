@@ -105,6 +105,24 @@ function getChain(chainId: number) {
 }
 
 // ============================================================================
+// Settlement Mutex - prevents concurrent settlements sharing a nonce
+// ============================================================================
+
+let settlementLock: Promise<void> = Promise.resolve();
+
+/**
+ * Serialize settlement operations to prevent nonce collisions.
+ * All on-chain writes from the facilitator wallet must go through this lock.
+ */
+export function withSettlementLock<T>(fn: () => Promise<T>): Promise<T> {
+  let release: () => void;
+  const next = new Promise<void>((resolve) => { release = resolve; });
+  const prev = settlementLock;
+  settlementLock = next;
+  return prev.then(fn).finally(() => release!());
+}
+
+// ============================================================================
 // Core Functions
 // ============================================================================
 

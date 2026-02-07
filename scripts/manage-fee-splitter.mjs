@@ -26,6 +26,8 @@ const ABI = [
   { name: 'facilitatorCount', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'totalSettlements', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
   { name: 'defaultFeeBps', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'emergencyWithdraw', type: 'function', stateMutability: 'nonpayable',
+    inputs: [{ name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [] },
 ];
 
 const rpcUrl = process.env.BASE_RPC_URL || 'https://base.publicnode.com';
@@ -114,8 +116,29 @@ async function main() {
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     console.log(`✅ Treasury updated in block ${receipt.blockNumber}`);
 
+  } else if (command === 'emergency-withdraw') {
+    const tokenAddr = arg ? getAddress(arg) : '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // default USDC
+    const amount = process.argv[5] ? BigInt(process.argv[5]) : null;
+
+    // Check balance first
+    const balAbi = [{ name: 'balanceOf', type: 'function', stateMutability: 'view',
+      inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }];
+    const bal = await publicClient.readContract({ address: tokenAddr, abi: balAbi, functionName: 'balanceOf', args: [FEE_SPLITTER] });
+    console.log(`Token ${tokenAddr} balance in fee splitter: ${bal} (${Number(bal) / 1e6} if 6 decimals)`);
+
+    const withdrawAmount = amount || bal;
+    if (withdrawAmount === 0n) { console.log('Nothing to withdraw.'); return; }
+
+    console.log(`Withdrawing ${withdrawAmount} of ${tokenAddr}...`);
+    const hash = await walletClient.writeContract({
+      address: FEE_SPLITTER, abi: ABI, functionName: 'emergencyWithdraw', args: [tokenAddr, withdrawAmount],
+    });
+    console.log(`TX: ${hash}`);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    console.log(`✅ Withdrawn in block ${receipt.blockNumber}`);
+
   } else {
-    console.log('Usage: node scripts/manage-fee-splitter.mjs [status|add-facilitator|remove-facilitator|set-treasury] [address]');
+    console.log('Usage: node scripts/manage-fee-splitter.mjs [status|add-facilitator|remove-facilitator|set-treasury|emergency-withdraw] [token-address] [amount]');
   }
 }
 

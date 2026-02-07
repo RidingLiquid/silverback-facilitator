@@ -59,6 +59,7 @@ import {
   isFeeSplitterEnabled,
   getFeeSplitterAddress,
   executeSplitPayment,
+  withSettlementLock,
 } from './fee-splitter';
 
 // ============================================================================
@@ -125,6 +126,13 @@ function detectProtocol(
  * 2. Token support
  */
 export async function settlePayment(
+  payload: PaymentPayload,
+  requirements: PaymentRequirements
+): Promise<SettlementResult & { fee?: bigint; protocol?: string; transactionId?: string }> {
+  return withSettlementLock(() => _settlePayment(payload, requirements));
+}
+
+async function _settlePayment(
   payload: PaymentPayload,
   requirements: PaymentRequirements
 ): Promise<SettlementResult & { fee?: bigint; protocol?: string; transactionId?: string }> {
