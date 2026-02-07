@@ -254,7 +254,8 @@ export function validatePayloadStructure(payload: unknown): payload is PaymentPa
 
   if (typeof inner.signature !== 'string') return false;
   if (!inner.authorization || typeof inner.authorization !== 'object') return false;
-  if (!inner.witness || typeof inner.witness !== 'object') return false;
+  // witness is required for Permit2 but not for ERC-3009
+  // ERC-3009 payloads have authorization.from/to/value instead of witness
 
   return true;
 }
