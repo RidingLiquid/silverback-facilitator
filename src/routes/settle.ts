@@ -140,9 +140,11 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // 5. Build success response (x402 spec compliant with extra fields)
-    const tokenAddress = payload.payload.authorization.permitted.token;
+    // Support both Permit2 (permitted.token/amount) and ERC-3009 (from/to/value)
+    const auth = payload.payload.authorization;
+    const tokenAddress = auth.permitted?.token || paymentRequirements.asset || paymentRequirements.token || '';
     const tokenInfo = getTokenByAddress(tokenAddress);
-    const amount = BigInt(payload.payload.authorization.permitted.amount);
+    const amount = BigInt(auth.permitted?.amount || auth.value || '0');
 
     const response = {
       // x402 spec required fields
