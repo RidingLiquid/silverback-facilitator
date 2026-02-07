@@ -287,6 +287,8 @@ export async function settlePayment(
   const useFeeSplitter = isFeeSplitterEnabled(chainId);
   const feeSplitterAddress = useFeeSplitter ? getFeeSplitterAddress(chainId) : null;
 
+  console.log(`[Settlement] Fee Splitter Debug: chainId=${chainId}, enabled=${useFeeSplitter}, address=${feeSplitterAddress}`);
+
   // When using fee splitter:
   // - payTo (in 402 response) = fee splitter address
   // - actualRecipient (in extra) = endpoint wallet that should receive funds
