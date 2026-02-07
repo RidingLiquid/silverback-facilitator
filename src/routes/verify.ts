@@ -11,8 +11,9 @@ import { X402VerifyInvalidReason } from '../types';
 import { verifySignature, validatePayloadStructure, validateRequirementsStructure } from '../services/signature';
 import { checkPayerReadiness } from '../services/balance';
 import { isNonceUsed } from '../services/settlement';
+import { extractErc3009Payload, verifyErc3009Payment } from '../services/erc3009';
 import { getTokenByAddress, getTokenDiscount, isTokenWhitelisted } from '../config/tokens';
-import { isNetworkSupported } from '../config/networks';
+import { isNetworkSupported, parseCaip2 } from '../config/networks';
 
 const router = Router();
 
@@ -34,6 +35,14 @@ router.post('/', async (req: Request, res: Response) => {
 
     // x402 spec: check for top-level x402Version (in addition to nested)
     const topLevelVersion = body.x402Version;
+
+    // Normalize v2 payloads: SDK v2 ExactEvmScheme doesn't include scheme/network
+    // at the top level of the payment payload, only in paymentRequirements
+    if (payload && paymentRequirements) {
+      if (!payload.scheme && paymentRequirements.scheme) payload.scheme = paymentRequirements.scheme;
+      if (!payload.network && paymentRequirements.network) payload.network = paymentRequirements.network;
+      if (!payload.x402Version && topLevelVersion) payload.x402Version = topLevelVersion;
+    }
 
     // 1. Validate request structure
     if (!payload || !paymentRequirements) {
@@ -93,11 +102,87 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // 4. Verify signature and all business rules
+    // 4. Detect payload format and verify accordingly
+    const erc3009Payload = extractErc3009Payload(normalizedBody.payload);
+
+    if (erc3009Payload) {
+      // ---- ERC-3009 verification path ----
+      const tokenAddress = (paymentRequirements.asset || paymentRequirements.token) as `0x${string}`;
+      if (!tokenAddress) {
+        return res.status(400).json({
+          isValid: false,
+          invalidReason: 'Missing token/asset in paymentRequirements for ERC-3009 payment',
+          payer: '',
+        });
+      }
+
+      const parsedNetwork = parseCaip2(payload.network);
+      const chainId = parsedNetwork?.chainId || 8453;
+
+      console.log(`[Verify] ERC-3009 payload detected, token: ${tokenAddress}, from: ${erc3009Payload.authorization.from}`);
+
+      const verifyResult = await verifyErc3009Payment(
+        erc3009Payload,
+        tokenAddress,
+        paymentRequirements,
+        chainId,
+        payload.network
+      );
+
+      if (!verifyResult.isValid) {
+        return res.status(200).json({
+          isValid: false,
+          invalidReason: `${verifyResult.error}: ${verifyResult.details}`,
+          payer: verifyResult.payer || '',
+        });
+      }
+
+      const payer = verifyResult.payer!;
+      const amount = BigInt(erc3009Payload.authorization.value);
+
+      // Check nonce (ERC-3009 nonces are bytes32)
+      const nonceUsed = await isNonceUsed(payer, erc3009Payload.authorization.nonce);
+      if (nonceUsed) {
+        return res.status(200).json({
+          isValid: false,
+          invalidReason: 'Nonce already used (replay attack prevented)',
+          payer,
+        });
+      }
+
+      // For ERC-3009, only check balance (no Permit2 approval needed)
+      const readiness = await checkPayerReadiness(payer, tokenAddress, amount, payload.network);
+      if (!readiness.hasBalance) {
+        return res.status(200).json({
+          isValid: false,
+          invalidReason: `Insufficient balance: has ${readiness.balance}, needs ${readiness.required}`,
+          payer,
+        });
+      }
+
+      const tokenInfo = getTokenByAddress(tokenAddress);
+      const discount = getTokenDiscount(tokenAddress);
+
+      console.log(`[Verify] Valid ERC-3009 payment from ${payer}: ${amount} ${tokenInfo?.symbol || 'tokens'} (${Date.now() - startTime}ms)`);
+
+      return res.status(200).json({
+        isValid: true,
+        payer,
+        token: {
+          address: tokenAddress,
+          symbol: tokenInfo?.symbol || readiness.token.symbol,
+          decimals: tokenInfo?.decimals || readiness.token.decimals,
+          isWhitelisted: isTokenWhitelisted(tokenAddress),
+          discount: discount > 0 ? `${discount}%` : undefined,
+          feeExempt: tokenInfo?.feeExempt,
+        },
+      });
+    }
+
+    // ---- Permit2 verification path (original) ----
     const verifyResult = await verifySignature(normalizedBody.payload, normalizedBody.paymentRequirements);
 
     if (!verifyResult.isValid) {
-      // Map internal error to x402 error code
       const errorCode = mapSignatureErrorToX402Code(verifyResult.error);
       return res.status(200).json({
         isValid: false,
@@ -134,7 +219,6 @@ router.post('/', async (req: Request, res: Response) => {
         isValid: false,
         invalidReason: `Permit2 approval required: user must approve ${readiness.required} ${readiness.token.symbol} to Permit2 contract`,
         payer,
-        // Extra info for debugging (not in x402 spec but helpful)
         permitInfo: {
           permit2Address: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
           tokenAddress: readiness.token.address,
@@ -170,7 +254,6 @@ router.post('/', async (req: Request, res: Response) => {
     const response = {
       isValid: true,
       payer,
-      // Extra fields (not in x402 spec but useful)
       token: {
         address: tokenAddress,
         symbol: tokenInfo?.symbol || readiness.token.symbol,
@@ -241,6 +324,13 @@ router.post('/quick', async (req: Request, res: Response) => {
     const payload = body.payload || body.paymentPayload;
     const paymentRequirements = body.paymentRequirements;
 
+    // Normalize v2 payloads
+    if (payload && paymentRequirements) {
+      if (!payload.scheme && paymentRequirements.scheme) payload.scheme = paymentRequirements.scheme;
+      if (!payload.network && paymentRequirements.network) payload.network = paymentRequirements.network;
+      if (!payload.x402Version && body.x402Version) payload.x402Version = body.x402Version;
+    }
+
     if (!payload || !paymentRequirements) {
       return res.status(400).json({
         isValid: false,
@@ -265,6 +355,29 @@ router.post('/quick', async (req: Request, res: Response) => {
       });
     }
 
+    // Check for ERC-3009 format
+    const erc3009Payload = extractErc3009Payload(payload);
+    if (erc3009Payload) {
+      const tokenAddress = (paymentRequirements.asset || paymentRequirements.token) as string;
+      const parsedNetwork = parseCaip2(payload.network);
+      const chainId = parsedNetwork?.chainId || 8453;
+
+      const verifyResult = await verifyErc3009Payment(
+        erc3009Payload,
+        tokenAddress,
+        paymentRequirements,
+        chainId,
+        payload.network
+      );
+
+      return res.status(200).json({
+        isValid: verifyResult.isValid,
+        invalidReason: verifyResult.isValid ? undefined : `${verifyResult.error}: ${verifyResult.details}`,
+        payer: verifyResult.payer || '',
+      });
+    }
+
+    // Permit2 path
     const verifyResult = await verifySignature(payload, paymentRequirements);
 
     return res.status(200).json({

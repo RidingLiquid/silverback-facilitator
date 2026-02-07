@@ -241,19 +241,37 @@ export async function verifySignature(
  * Validate payload structure
  */
 export function validatePayloadStructure(payload: unknown): payload is PaymentPayload {
-  if (!payload || typeof payload !== 'object') return false;
+  if (!payload || typeof payload !== 'object') {
+    console.log('[Validate] Failed: payload is null or not object');
+    return false;
+  }
 
   const p = payload as Record<string, unknown>;
 
-  if (p.x402Version !== 1 && p.x402Version !== 2) return false;
-  if (p.scheme !== 'exact') return false;
-  if (typeof p.network !== 'string') return false;
-  if (!p.payload || typeof p.payload !== 'object') return false;
+  if (p.x402Version !== 1 && p.x402Version !== 2) {
+    console.log('[Validate] Failed: x402Version is', p.x402Version);
+    return false;
+  }
+  // scheme and network may be missing in v2 payloads (injected from requirements by routes)
+  if (p.scheme && p.scheme !== 'exact') {
+    console.log('[Validate] Failed: scheme is', p.scheme);
+    return false;
+  }
+  if (!p.payload || typeof p.payload !== 'object') {
+    console.log('[Validate] Failed: inner payload missing. Keys:', Object.keys(p));
+    return false;
+  }
 
   const inner = p.payload as Record<string, unknown>;
 
-  if (typeof inner.signature !== 'string') return false;
-  if (!inner.authorization || typeof inner.authorization !== 'object') return false;
+  if (typeof inner.signature !== 'string') {
+    console.log('[Validate] Failed: signature missing. Inner keys:', Object.keys(inner));
+    return false;
+  }
+  if (!inner.authorization || typeof inner.authorization !== 'object') {
+    console.log('[Validate] Failed: authorization missing. Inner keys:', Object.keys(inner));
+    return false;
+  }
   // witness is required for Permit2 but not for ERC-3009
   // ERC-3009 payloads have authorization.from/to/value instead of witness
 

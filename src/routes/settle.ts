@@ -34,6 +34,14 @@ router.post('/', async (req: Request, res: Response) => {
     // x402 spec: check for top-level x402Version (in addition to nested)
     const topLevelVersion = body.x402Version;
 
+    // Normalize v2 payloads: SDK v2 ExactEvmScheme doesn't include scheme/network
+    // at the top level of the payment payload, only in paymentRequirements
+    if (payload && paymentRequirements) {
+      if (!payload.scheme && paymentRequirements.scheme) payload.scheme = paymentRequirements.scheme;
+      if (!payload.network && paymentRequirements.network) payload.network = paymentRequirements.network;
+      if (!payload.x402Version && topLevelVersion) payload.x402Version = topLevelVersion;
+    }
+
     // 1. Validate request structure
     if (!payload || !paymentRequirements) {
       return res.status(400).json({
