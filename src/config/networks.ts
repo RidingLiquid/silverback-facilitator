@@ -211,6 +211,15 @@ export const FEE_SPLITTER_CONFIG = {
   addressTestnet: (process.env.FEE_SPLITTER_ADDRESS_TESTNET ||
     '0x8514dc860BCB61f309264ba89B8952E264286D1f') as `0x${string}`,
 
+  /**
+   * Default treasury address for when actualRecipient is not specified.
+   * This is used when x402 SDK strips extra.actualRecipient from requirements.
+   * Funds will be sent here after fee split.
+   */
+  defaultTreasury: (process.env.FEE_SPLITTER_DEFAULT_TREASURY ||
+    process.env.X402_WALLET_ADDRESS ||
+    '0xD34411a70EffbDd000c529bbF572082ffDcF1794') as `0x${string}`,
+
   /** Get fee splitter address for a given chain ID */
   getAddress(chainId: number): `0x${string}` {
     if (chainId === 84532) return this.addressTestnet;

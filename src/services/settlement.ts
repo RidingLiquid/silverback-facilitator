@@ -26,6 +26,7 @@ import {
   getNetworkConfig,
   PERMIT2_ADDRESS,
   FACILITATOR_CONFIG,
+  FEE_SPLITTER_CONFIG,
   parseCaip2,
 } from '../config/networks';
 import {
@@ -291,8 +292,12 @@ export async function settlePayment(
   // - actualRecipient (in extra) = endpoint wallet that should receive funds
   // - The client signs Permit2 with receiver = payTo = fee splitter
   // - We then call splitPayment to route funds to actualRecipient
+  //
+  // NOTE: x402 SDK strips extra.actualRecipient during buildPaymentRequirements(),
+  // so we fall back to FEE_SPLITTER_CONFIG.defaultTreasury when not present.
+  // This is the configured treasury address (usually X402_WALLET_ADDRESS).
   const actualRecipient = useFeeSplitter
-    ? (requirements.extra?.actualRecipient as `0x${string}` || receiver)
+    ? (requirements.extra?.actualRecipient as `0x${string}` || FEE_SPLITTER_CONFIG.defaultTreasury)
     : receiver;
 
   // Permit2 transfer target:
