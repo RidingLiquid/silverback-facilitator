@@ -20,7 +20,7 @@ export interface TokenPrice {
   address: string;
   priceUsd: number;
   updatedAt: Date;
-  source: 'dexscreener' | 'hardcoded' | 'fallback';
+  source: 'dexscreener' | 'geckoterminal' | 'hardcoded' | 'fallback';
 }
 
 interface DexScreenerPair {
@@ -72,6 +72,44 @@ const FALLBACK_PRICES: Record<string, number> = {
 const priceCache = new Map<string, TokenPrice>();
 let refreshInterval: NodeJS.Timeout | null = null;
 let isInitialized = false;
+let initPromise: Promise<void> | null = null;
+
+// BACK token pool on GeckoTerminal (Uniswap V2 BACK/VIRTUAL pair)
+const BACK_POOL_ADDRESS = '0xE84923f730526819FAa23F4203CFFDd92F0636C3';
+
+/**
+ * Fetch BACK token price from GeckoTerminal
+ * DexScreener doesn't index low-volume Virtuals pairs, so we use GeckoTerminal
+ */
+async function fetchGeckoTerminalPrice(poolAddress: string): Promise<number | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    const response = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/base/pools/${poolAddress}`,
+      { signal: controller.signal, headers: { 'Accept': 'application/json' } }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`[PriceCache] GeckoTerminal returned ${response.status} for ${poolAddress}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const priceStr = data.data?.attributes?.base_token_price_usd;
+    return priceStr ? parseFloat(priceStr) : null;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`[PriceCache] GeckoTerminal timeout for ${poolAddress}`);
+    } else {
+      console.warn(`[PriceCache] GeckoTerminal error for ${poolAddress}:`, error);
+    }
+    return null;
+  }
+}
 
 /**
  * Fetch price from DexScreener for a token
@@ -147,8 +185,10 @@ async function refreshTokenPrice(symbol: string, address: string): Promise<void>
     return;
   }
 
-  // Fetch from DexScreener
-  const price = await fetchDexScreenerPrice(address);
+  // Fetch price: use GeckoTerminal for BACK (DexScreener doesn't index it), DexScreener for others
+  const price = symbol === 'BACK'
+    ? await fetchGeckoTerminalPrice(BACK_POOL_ADDRESS)
+    : await fetchDexScreenerPrice(address);
 
   if (price !== null && price > 0) {
     priceCache.set(symbol, {
@@ -156,7 +196,7 @@ async function refreshTokenPrice(symbol: string, address: string): Promise<void>
       address,
       priceUsd: price,
       updatedAt: new Date(),
-      source: 'dexscreener',
+      source: symbol === 'BACK' ? 'geckoterminal' : 'dexscreener',
     });
     console.log(`[PriceCache] Updated ${symbol}: $${price.toFixed(6)}`);
   } else {
@@ -208,20 +248,28 @@ async function refreshAllPrices(): Promise<void> {
  */
 export async function initPriceCache(): Promise<void> {
   if (isInitialized) {
-    console.log('[PriceCache] Already initialized');
     return;
   }
 
-  console.log('[PriceCache] Initializing...');
+  // Prevent race condition: reuse in-flight init promise
+  if (initPromise) {
+    return initPromise;
+  }
 
-  // Initial fetch
-  await refreshAllPrices();
+  initPromise = (async () => {
+    console.log('[PriceCache] Initializing...');
 
-  // Start background refresh
-  refreshInterval = setInterval(refreshAllPrices, REFRESH_INTERVAL_MS);
+    // Initial fetch
+    await refreshAllPrices();
 
-  isInitialized = true;
-  console.log('[PriceCache] Initialized with background refresh every 5 minutes');
+    // Start background refresh
+    refreshInterval = setInterval(refreshAllPrices, REFRESH_INTERVAL_MS);
+
+    isInitialized = true;
+    console.log('[PriceCache] Initialized with background refresh every 5 minutes');
+  })();
+
+  return initPromise;
 }
 
 /**
