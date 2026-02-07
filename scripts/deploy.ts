@@ -45,7 +45,7 @@ async function main() {
   // Configuration
   const treasury = "0xD34411a70EffbDd000c529bbF572082ffDcF1794";
   const defaultFeeBps = 10; // 0.1%
-  const facilitator = "0x21fdEd74C901129977B8e28C2588595163E1e235";
+  const facilitator = "0x48380bCf1c09773C9E96901F89A7A6B75E2BBeCC";
 
   console.log("Configuration:");
   console.log(`  Treasury: ${treasury}`);
