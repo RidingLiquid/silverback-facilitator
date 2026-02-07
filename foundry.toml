@@ -1,0 +1,30 @@
+[profile.default]
+src = "contracts"
+out = "out"
+libs = ["lib"]
+test = "contracts/test"
+solc = "0.8.20"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+
+# Remappings for OpenZeppelin
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+
+# Testing configuration
+fuzz = { runs = 256 }
+invariant = { runs = 256, depth = 15 }
+
+# Gas reporting
+gas_reports = ["X402FeeSplitter"]
+
+# Verification
+[etherscan]
+base = { key = "${BASESCAN_API_KEY}" }
+
+[rpc_endpoints]
+base = "https://base.publicnode.com"
+base_sepolia = "https://sepolia.base.org"
