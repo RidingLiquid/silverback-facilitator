@@ -48,7 +48,7 @@ const router = Router();
  */
 router.get('/', (_req: Request, res: Response) => {
   // Build x402 spec compliant "kinds" array
-  const kinds = getSupportedNetworksCoinbase().map(network => ({
+  const kinds = getSupportedNetworks().map(network => ({
     x402Version: 2 as const,
     scheme: 'exact' as const,
     network,
