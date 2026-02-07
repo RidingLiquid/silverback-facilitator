@@ -40,7 +40,7 @@ import verifyRouter from './routes/verify';
 import settleRouter from './routes/settle';
 import webhooksRouter from './routes/webhooks';
 import discoveryRouter from './routes/discovery';
-import { FACILITATOR_CONFIG, getSupportedNetworks, X402_PROXY_MODE } from './config/networks';
+import { FACILITATOR_CONFIG, getSupportedNetworks, X402_PROXY_MODE, FEE_SPLITTER_CONFIG } from './config/networks';
 import { getSupportedTokensList } from './config/tokens';
 import { initDatabase, isUsingPostgres } from './services/database';
 import { initPriceCache, getCacheStatus } from './services/price-cache';
@@ -158,6 +158,12 @@ export function createFacilitatorRouter(): Router {
       database: usingDatabase ? 'postgresql' : 'in-memory',
       production: isProduction,
       x402Compliant: true,
+      feeSplitter: {
+        enabled: FEE_SPLITTER_CONFIG.enabled,
+        mainnet: FEE_SPLITTER_CONFIG.addressMainnet,
+        testnet: FEE_SPLITTER_CONFIG.addressTestnet,
+        defaultTreasury: FEE_SPLITTER_CONFIG.defaultTreasury,
+      },
       warnings: warnings.length > 0 ? warnings : undefined,
       timestamp: new Date().toISOString(),
     });
