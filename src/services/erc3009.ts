@@ -19,7 +19,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import type { PaymentPayload, PaymentRequirements, SettlementResult } from '../types';
 import { getNetworkConfig, FACILITATOR_CONFIG, FEE_SPLITTER_CONFIG } from '../config/networks';
 import { getTokenByAddress, getTokenFeePercent, calculateFeeAmount } from '../config/tokens';
-import { isFeeSplitterEnabled, getFeeSplitterAddress, executeSplitPayment, withSettlementLock } from './fee-splitter';
+import { isFeeSplitterEnabled, getFeeSplitterAddress, executeSplitPayment } from './fee-splitter';
 
 // ============================================================================
 // ERC-3009 Token Registry
@@ -332,14 +332,6 @@ export async function verifyErc3009Payment(
  * Execute ERC-3009 settlement
  */
 export async function settleErc3009Payment(
-  payload: Erc3009Payload,
-  tokenAddress: string,
-  network: string
-): Promise<SettlementResult> {
-  return withSettlementLock(() => _settleErc3009Payment(payload, tokenAddress, network));
-}
-
-async function _settleErc3009Payment(
   payload: Erc3009Payload,
   tokenAddress: string,
   network: string
