@@ -212,13 +212,64 @@ export async function executeSplitPayment(
 
     const [netAmount, feeAmount] = result as [bigint, bigint];
 
-    // Execute transaction
-    const hash = await walletClient.writeContract({
-      address: splitterAddress,
-      abi: FEE_SPLITTER_ABI,
-      functionName: 'splitPayment',
-      args: [token, payer, recipient, amount],
-    });
+    // Execute transaction with nonce retry logic
+    // "replacement transaction underpriced" happens when a previous tx
+    // is still pending in the mempool with the same nonce
+    const MAX_RETRIES = 3;
+    let hash: `0x${string}` | undefined;
+    let lastError: string = '';
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        // Get explicit pending nonce to avoid stale cache
+        const nonce = await publicClient.getTransactionCount({
+          address: facilitatorAccount.address,
+          blockTag: 'pending',
+        });
+
+        // Bump gas on retries to replace stuck tx
+        const gasOptions = attempt > 0
+          ? {
+              maxFeePerGas: BigInt(Math.ceil(1_500_000_000 * Math.pow(1.5, attempt))),
+              maxPriorityFeePerGas: BigInt(Math.ceil(1_000_000 * Math.pow(2, attempt))),
+            }
+          : {};
+
+        if (attempt > 0) {
+          console.log(`[FeeSplitter] Retry ${attempt}/${MAX_RETRIES} with nonce ${nonce}${attempt > 0 ? ' (bumped gas)' : ''}`);
+        }
+
+        hash = await walletClient.writeContract({
+          address: splitterAddress,
+          abi: FEE_SPLITTER_ABI,
+          functionName: 'splitPayment',
+          args: [token, payer, recipient, amount],
+          nonce,
+          ...gasOptions,
+        } as any);
+        break; // Success, exit retry loop
+      } catch (retryError) {
+        lastError = retryError instanceof Error ? retryError.message : 'Unknown error';
+        const isNonceError = lastError.includes('replacement transaction underpriced') ||
+                             lastError.includes('nonce too low') ||
+                             lastError.includes('already known');
+
+        if (!isNonceError || attempt >= MAX_RETRIES - 1) {
+          throw retryError; // Not a nonce issue or out of retries
+        }
+
+        console.warn(`[FeeSplitter] Nonce conflict (attempt ${attempt + 1}): ${lastError.slice(0, 80)}`);
+        // Wait for pending tx to clear before retry
+        await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+      }
+    }
+
+    if (!hash) {
+      return {
+        success: false,
+        error: `splitPayment failed after ${MAX_RETRIES} retries: ${lastError}`,
+      };
+    }
 
     console.log(`[FeeSplitter] Transaction submitted: ${hash}`);
 
