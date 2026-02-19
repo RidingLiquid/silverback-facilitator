@@ -10,15 +10,16 @@
     "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
+    "@solana/kit": "^2.1.0",
     "@x402/core": "^2.3.0",
     "@x402/evm": "^2.3.0",
+    "@x402/extensions": "^2.3.1",
     "@x402/svm": "^2.3.0",
-    "@solana/kit": "^2.1.0",
-    "viem": "^2.25.0",
-    "express": "^4.21.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "esbuild": "^0.20.0"
+    "esbuild": "^0.20.0",
+    "express": "^4.21.0",
+    "viem": "^2.25.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
