@@ -1,36 +1,29 @@
 {
   "name": "@silverback/x402-facilitator",
-  "version": "1.0.0",
-  "description": "Silverback x402 Payment Facilitator - Multi-token Permit2 settlements on Base",
+  "version": "2.0.0",
+  "description": "Silverback x402 Payment Facilitator - SDK-based, Base USDC + Solana USDC",
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=dist/index.js --external:pg-native",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=dist/index.js --external:@solana/kit --external:@solana/web3.js",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit --skipLibCheck",
-    "compile": "hardhat compile",
-    "test": "hardhat test",
-    "test:fork": "hardhat test --network hardhat",
-    "test:gas": "REPORT_GAS=true hardhat test",
-    "deploy:sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
-    "deploy:mainnet": "hardhat run scripts/deploy.ts --network base"
+    "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.4.0",
+    "@x402/core": "^2.3.0",
+    "@x402/evm": "^2.3.0",
+    "@x402/svm": "^2.3.0",
+    "@solana/kit": "^2.1.0",
+    "viem": "^2.25.0",
+    "express": "^4.21.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "esbuild": "^0.20.0",
-    "express": "^4.18.2",
-    "pg": "^8.11.3",
-    "viem": "^2.21.0"
+    "dotenv": "^16.4.7",
+    "esbuild": "^0.20.0"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
-    "@types/pg": "^8.10.9",
-    "hardhat": "^2.28.4",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   },
