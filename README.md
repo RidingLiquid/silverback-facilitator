@@ -78,10 +78,8 @@ app.use(paymentMiddleware(receiverAddress, resourceConfig, silverback));
 
 ## Links
 
-- **Resource Server:** https://x402.silverbackdefi.app
 - **Website:** https://silverbackdefi.app
 - **x402scan:** [Silverback Facilitator](https://x402scan.com/facilitators/silverback)
-- **npm MCP:** [silverback-x402-mcp](https://www.npmjs.com/package/silverback-x402-mcp)
 
 ## License
 
