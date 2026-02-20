@@ -11,13 +11,29 @@
 import { x402Facilitator } from '@x402/core/facilitator';
 import { ExactEvmScheme } from '@x402/evm/exact/facilitator';
 import { toFacilitatorEvmSigner } from '@x402/evm';
-import { createPublicClient, createWalletClient, http } from 'viem';
+import { createPublicClient, createWalletClient, http, defineChain } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
+
+// SKALE Base Hub — zero gas, ~1s finality
+const skaleBase = defineChain({
+  id: 1187947933,
+  name: 'SKALE Base Hub',
+  nativeCurrency: { name: 'sFUEL', symbol: 'sFUEL', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://skale-base.skalenodes.com/v1/base'] },
+  },
+  blockExplorers: {
+    default: { name: 'Explorer', url: 'https://skale-base-explorer.skalenodes.com' },
+  },
+});
+
+const SKALE_BASE_CAIP2 = 'eip155:1187947933';
 
 let facilitator: x402Facilitator | null = null;
 let evmAddress = '';
 let svmAddress = '';
+let skaleEnabled = false;
 
 /**
  * Initialize the EVM facilitator (Base mainnet).
@@ -50,6 +66,43 @@ export function initializeEvm(privateKey: string, rpcUrl?: string): void {
   facilitator.register('eip155:8453', scheme);
 
   console.log(`[facilitator] EVM initialized — ${evmAddress}`);
+}
+
+/**
+ * Initialize the SKALE Base facilitator.
+ * Uses the same private key as Base EVM — zero gas, no funding needed.
+ */
+export function initializeSkale(privateKey: string): void {
+  try {
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    const transport = http(skaleBase.rpcUrls.default.http[0]);
+
+    const publicClient = createPublicClient({ chain: skaleBase, transport });
+    const walletClient = createWalletClient({ account, chain: skaleBase, transport });
+
+    const combined = {
+      address: account.address,
+      readContract: (args: any) => publicClient.readContract(args),
+      verifyTypedData: (args: any) => publicClient.verifyTypedData(args),
+      writeContract: (args: any) => walletClient.writeContract(args),
+      sendTransaction: (args: any) => walletClient.sendTransaction(args),
+      waitForTransactionReceipt: (args: any) => publicClient.waitForTransactionReceipt(args),
+      getCode: (args: any) => publicClient.getCode(args),
+    };
+
+    const signer = toFacilitatorEvmSigner(combined as any);
+    const scheme = new ExactEvmScheme(signer);
+
+    if (!facilitator) {
+      facilitator = new x402Facilitator();
+    }
+    facilitator.register(SKALE_BASE_CAIP2, scheme);
+    skaleEnabled = true;
+
+    console.log(`[facilitator] SKALE Base initialized — ${account.address} (zero gas)`);
+  } catch (err) {
+    console.warn('[facilitator] SKALE init failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 /**
@@ -104,5 +157,5 @@ export function isReady(): boolean {
 
 /** Get facilitator wallet addresses */
 export function getAddresses() {
-  return { evm: evmAddress, svm: svmAddress };
+  return { evm: evmAddress, svm: svmAddress, skale: skaleEnabled ? evmAddress : '' };
 }

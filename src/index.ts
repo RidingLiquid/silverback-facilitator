@@ -9,7 +9,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import routes from './routes';
-import { initializeEvm, initializeSvm, isReady, getAddresses } from './facilitator';
+import { initializeEvm, initializeSkale, initializeSvm, isReady, getAddresses } from './facilitator';
 
 const app = express();
 const PORT = parseInt(process.env.X402_FACILITATOR_PORT || process.env.PORT || '3402', 10);
@@ -66,7 +66,7 @@ app.get('/', (_req, res) => {
   res.json({
     name: 'Silverback x402 Facilitator',
     version: '2.0.0',
-    description: 'x402 payment settlement — Base USDC + Solana USDC',
+    description: 'x402 payment settlement — Base USDC + SKALE USDC + Solana USDC',
     endpoints: {
       '/supported': 'GET  — List supported kinds, extensions, signers',
       '/verify': 'POST — Verify payment signature',
@@ -105,6 +105,9 @@ async function start() {
     console.warn('[startup] Running without EVM — settlements will fail');
   } else {
     initializeEvm(evmKey, process.env.BASE_RPC_URL);
+
+    // Initialize SKALE (uses same EVM key, zero gas)
+    initializeSkale(evmKey);
   }
 
   // Initialize SVM (optional)
@@ -122,6 +125,7 @@ async function start() {
     console.log(`  Port:     ${PORT}`);
     console.log(`  Mode:     ${process.env.NODE_ENV || 'development'}`);
     console.log(`  EVM:      ${addrs.evm || 'not configured'}`);
+    console.log(`  SKALE:    ${addrs.skale || 'not configured'}`);
     console.log(`  Solana:   ${addrs.svm || 'not configured'}`);
     console.log(`  Ready:    ${isReady()}`);
     console.log('');

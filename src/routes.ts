@@ -178,6 +178,7 @@ router.get('/health', (_req: Request, res: Response) => {
   const addrs = getAddresses();
   const networks: string[] = [];
   if (addrs.evm) networks.push('eip155:8453');
+  if (addrs.skale) networks.push('eip155:1187947933');
   if (addrs.svm) networks.push('solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp');
 
   res.json({
