@@ -136,10 +136,41 @@ export async function initializeSvm(privateKeyInput: string): Promise<void> {
     const svmSigner = {
       ...rawSvmSigner,
       signTransaction: async (transaction: string, feePayer: string, network: string) => {
-        console.log(`[SVM] signTransaction: feePayer=${feePayer}, network=${network}, txLen=${transaction.length}`);
+        // Decode base64 wire tx to inspect signature slots BEFORE facilitator signs
+        try {
+          const wire = Buffer.from(transaction, 'base64');
+          let off = 0;
+          const numSigs = wire[off] & 0x7f;
+          off += (wire[off] & 0x80) ? 2 : 1;
+          const slotInfo: string[] = [];
+          for (let i = 0; i < numSigs; i++) {
+            const sig = wire.slice(off, off + 64);
+            const isZero = sig.every((b: number) => b === 0);
+            slotInfo.push(`slot${i}=${isZero ? 'EMPTY' : 'SIGNED'}`);
+            off += 64;
+          }
+          console.log(`[SVM] signTransaction: feePayer=${feePayer}, network=${network}, ${numSigs} sig slots: [${slotInfo.join(', ')}]`);
+        } catch { /* non-critical */ }
+
         try {
           const result = await rawSvmSigner.signTransaction(transaction, feePayer, network);
-          console.log(`[SVM] signTransaction: SUCCESS (resultLen=${result.length})`);
+
+          // Decode AFTER facilitator signs to verify both signatures present
+          try {
+            const wire = Buffer.from(result, 'base64');
+            let off = 0;
+            const numSigs = wire[off] & 0x7f;
+            off += (wire[off] & 0x80) ? 2 : 1;
+            const slotInfo: string[] = [];
+            for (let i = 0; i < numSigs; i++) {
+              const sig = wire.slice(off, off + 64);
+              const isZero = sig.every((b: number) => b === 0);
+              slotInfo.push(`slot${i}=${isZero ? 'EMPTY' : 'SIGNED'}`);
+              off += 64;
+            }
+            console.log(`[SVM] signTransaction AFTER: [${slotInfo.join(', ')}]`);
+          } catch { /* non-critical */ }
+
           return result;
         } catch (err: any) {
           console.error(`[SVM] signTransaction FAILED:`, err.message || err);
