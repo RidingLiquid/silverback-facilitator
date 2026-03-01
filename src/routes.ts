@@ -99,6 +99,10 @@ router.post('/verify', async (req: Request, res: Response) => {
 
   try {
     const result = await getFacilitator().verify(paymentPayload, paymentRequirements);
+    if (!result.isValid) {
+      console.error(`[verify] REJECTED: ${result.invalidReason}`, result.invalidMessage || '');
+      console.error(`[verify] Network: ${paymentRequirements?.network}, Payer: ${result.payer}`);
+    }
     res.json(result);
   } catch (err) {
     console.error('[verify] Error:', err);
@@ -129,6 +133,9 @@ router.post('/settle', async (req: Request, res: Response) => {
     // Catalog resource on successful settlement
     if (result.success) {
       catalogFromSettle(paymentPayload, paymentRequirements);
+      console.log(`[settle] SUCCESS: ${paymentRequirements?.network} → ${result.transaction}`);
+    } else {
+      console.error(`[settle] FAILED: ${result.errorReason}`, paymentRequirements?.network);
     }
 
     res.json(result);

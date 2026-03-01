@@ -130,7 +130,34 @@ export async function initializeSvm(privateKeyInput: string): Promise<void> {
     const keypair = await createKeyPairSignerFromBytes(keyBytes as any);
     svmAddress = keypair.address;
 
-    const svmSigner = toFacilitatorSvmSigner(keypair);
+    const rawSvmSigner = toFacilitatorSvmSigner(keypair);
+
+    // Wrap signer with diagnostic logging to capture exact Solana errors
+    const svmSigner = {
+      ...rawSvmSigner,
+      signTransaction: async (transaction: string, feePayer: string, network: string) => {
+        console.log(`[SVM] signTransaction: feePayer=${feePayer}, network=${network}, txLen=${transaction.length}`);
+        try {
+          const result = await rawSvmSigner.signTransaction(transaction, feePayer, network);
+          console.log(`[SVM] signTransaction: SUCCESS (resultLen=${result.length})`);
+          return result;
+        } catch (err: any) {
+          console.error(`[SVM] signTransaction FAILED:`, err.message || err);
+          throw err;
+        }
+      },
+      simulateTransaction: async (transaction: string, network: string) => {
+        console.log(`[SVM] simulateTransaction: network=${network}, txLen=${transaction.length}`);
+        try {
+          await rawSvmSigner.simulateTransaction(transaction, network);
+          console.log(`[SVM] simulateTransaction: SUCCESS`);
+        } catch (err: any) {
+          console.error(`[SVM] ❌ simulateTransaction FAILED:`, err.message || err);
+          throw err;
+        }
+      },
+    };
+
     const svmScheme = new ExactSvmScheme(svmSigner);
 
     if (!facilitator) {
