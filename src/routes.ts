@@ -10,10 +10,32 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { createHash } from 'crypto';
 import { extractDiscoveryInfo } from '@x402/extensions/bazaar';
 import { getFacilitator, isReady, getAddresses } from './facilitator';
 
 const router = Router();
+
+// ─── Replay Protection ──────────────────────────────────────────────────────
+// Track settled payment hashes to reject replay attempts.
+// In-memory — resets on restart, which is fine (worst case: one free call after restart).
+const settledPayments = new Set<string>();
+const MAX_SETTLED_CACHE = 10_000;
+
+function paymentFingerprint(payload: any): string {
+  // Hash the full payload — any change produces a different hash
+  const raw = JSON.stringify(payload);
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+function recordSettled(fingerprint: string): void {
+  settledPayments.add(fingerprint);
+  // Cap memory — evict oldest entries if too large
+  if (settledPayments.size > MAX_SETTLED_CACHE) {
+    const first = settledPayments.values().next().value;
+    if (first) settledPayments.delete(first);
+  }
+}
 
 // ─── Bazaar Catalog (in-memory) ──────────────────────────────────────────────
 
@@ -98,6 +120,17 @@ router.post('/verify', async (req: Request, res: Response) => {
   }
 
   try {
+    // Replay protection — reject if this exact payment was already settled
+    const fingerprint = paymentFingerprint(paymentPayload);
+    if (settledPayments.has(fingerprint)) {
+      console.warn(`[verify] REPLAY blocked — payment already settled (hash: ${fingerprint.slice(0, 12)}...)`);
+      return res.json({
+        isValid: false,
+        invalidReason: 'payment_already_settled',
+        invalidMessage: 'This payment has already been settled. A new payment is required.',
+      });
+    }
+
     const result = await getFacilitator().verify(paymentPayload, paymentRequirements);
     if (!result.isValid) {
       console.error(`[verify] REJECTED: ${result.invalidReason}`, result.invalidMessage || '');
@@ -130,10 +163,12 @@ router.post('/settle', async (req: Request, res: Response) => {
   try {
     const result = await getFacilitator().settle(paymentPayload, paymentRequirements);
 
-    // Catalog resource on successful settlement
+    // Catalog resource + record fingerprint on successful settlement
     if (result.success) {
+      const fingerprint = paymentFingerprint(paymentPayload);
+      recordSettled(fingerprint);
       catalogFromSettle(paymentPayload, paymentRequirements);
-      console.log(`[settle] SUCCESS: ${paymentRequirements?.network} → ${result.transaction}`);
+      console.log(`[settle] SUCCESS: ${paymentRequirements?.network} → ${result.transaction} (hash: ${fingerprint.slice(0, 12)}...)`);
     } else {
       console.error(`[settle] FAILED: ${result.errorReason}`, paymentRequirements?.network);
     }
